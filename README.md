@@ -19,6 +19,7 @@ The purpose of this tool
 Usage:
     php memcached-slabs.php [options] host1:port1 [host2:port2 ...]
 Options:
+    -r generate html report
     -p <size:count> preallocate slabs by setting/deleting
     -ps <size:count> preallocate slabs by setting (no deleting)
     -e  process only slabs with evictions-e
@@ -42,10 +43,10 @@ php memcached-slabs.php -g MY_KEY myhost:11211 myhost2:11011
 php memcached-slabs.php -gp MY_KEY -gp MY_KEY2 myhost:11211 myhost2:11011
 
 # generate slabs allocation html reports for myhost:11211 and myhost2:11011 (faster, without keys statistics)
-php memcached-slabs.php -s myhost:11211 myhost2:11011
+php memcached-slabs.php -r -s myhost:11211 myhost2:11011
 
 # generate slabs allocation html reports for myhost:11211 and myhost2:11011 (slower, with keys statistics)
-php memcached-slabs.php myhost:11211 myhost2:11011
+php memcached-slabs.php -r myhost:11211 myhost2:11011
 
 # fill 192.168.59.105:11211 with 50000 record with random size between 50 and 100,
 # zero ttl and names SMALL_0 to SMALL_49999
