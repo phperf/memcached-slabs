@@ -95,7 +95,7 @@ class MemcachedTool {
 
             $path = explode('_', $key);
             foreach ($path as &$item) {
-                if (preg_match('/[0-9]+/', $item)) {
+                if (preg_match('/[0-9\.]+/', $item)) {
                     $item = '%';
                 }
             }
