@@ -173,6 +173,7 @@ class MemcachedTool {
             }
             $slab['prefix'] = $prefix;
 
+            $slab['cachedump_time'] = 'skipped';
             if ($this->analyzeKeys && !empty($slab['number'])) {
                 $slab['cachedump_time'] = round(microtime(1) - $start, 4);
                 $this->formatKeys($keys, $prefix, $slab);
@@ -653,6 +654,7 @@ class MemcachedTool {
                             credits:{enabled:false},
                             series: [{
                                 type: "areaspline",
+                                name: yAxis,
                                 data: data
                             }]
                         });
@@ -680,6 +682,10 @@ class MemcachedTool {
                     for (var i in data.slabs) {
                         if (data.slabs.hasOwnProperty(i)) {
                             slab = data.slabs[i];
+
+                            if (typeof slab['max'] == 'undefined') {
+                                return '';
+                            }
 
                             evSet = slab['evicted'] / slab['cmd_set'];
 
