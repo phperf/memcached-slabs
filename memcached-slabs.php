@@ -35,7 +35,14 @@ class MemcachedTool {
         $preallocateCommand = '';
         $totalPages = 0;
         $totalPreallocatedMemory = 0;
-        foreach ($this->slabs() as $slab) {
+
+
+        $slabs = $this->slabs();
+        if (!$slabs) {
+            return;
+        }
+
+        foreach ($slabs as $slab) {
             if (empty($slab['max'])) {
                 continue;
             }
@@ -145,7 +152,12 @@ class MemcachedTool {
     public $analyzeKeys = true;
     private $usedSlabs = array();
     public function getKeys() {
-        foreach ($this->getSlabs() as $id => $slab) {
+        $slabs = $this->getSlabs();
+        if (!$slabs) {
+            return array();
+        }
+
+        foreach ($slabs as $id => $slab) {
             $prefix = $id . ':' . $slab['chunk_size'];
             echo "\n", $this->reportName;
             echo "\n$prefix\n";
@@ -215,11 +227,13 @@ class MemcachedTool {
 
     private $slabs;
     public function slabs() {
-        echo "Getting slabs stats...\n";
-
         if (null !== $this->slabs) {
             return $this->slabs;
         }
+
+        echo "Getting slabs stats...\n";
+
+        $this->slabs = array();
 
         $slabParamNames = array();
 
@@ -250,10 +264,12 @@ class MemcachedTool {
             }
         }
 
-        foreach ($this->slabs as &$slab) {
-            foreach ($slabParamNames as $paramName) {
-                if (!isset($slab[$paramName])) {
-                    $slab[$paramName] = 0;
+        if ($this->slabs) {
+            foreach ($this->slabs as &$slab) {
+                foreach ($slabParamNames as $paramName) {
+                    if (!isset($slab[$paramName])) {
+                        $slab[$paramName] = 0;
+                    }
                 }
             }
         }
@@ -385,7 +401,11 @@ class MemcachedTool {
 
             <script src="https://code.jquery.com/jquery-1.11.2.min.js"></script>
             <script src="http://www.kryogenix.org/code/browser/sorttable/sorttable.js"></script>
-            <script src="http://www.chartjs.org/assets/Chart.min.js" charset="utf-8"></script>
+            <!--script src="http://www.chartjs.org/assets/Chart.min.js" charset="utf-8"></script-->
+            <script type="text/javascript" src="http://code.highcharts.com/highcharts.js"></script>
+            <script type="text/javascript" src="http://code.highcharts.com/highcharts-more.js"></script>
+
+
         </head>
         <body>
 
@@ -403,7 +423,7 @@ class MemcachedTool {
 
                 instance.getKey = function(key){
                     //console.log(data);
-                    console.log(data.maxKeys[key]);
+                    //console.log(data.maxKeys[key]);
                 };
 
                 function renderTable(keys, rows) {
@@ -465,7 +485,7 @@ class MemcachedTool {
                 };
 
                 function keysReportHtml(data) {
-                    console.log(data);
+                    //console.log(data);
                     var reportKeys = ['Mask', 'Count', 'Expired', 'Total Size', 'Average Size', 'Min Size', 'Max Size', 'Affected Slabs', 'Sample Key', 'Top Entities'],
                         reportData = [],
                         item = {},
@@ -612,37 +632,31 @@ class MemcachedTool {
                     return renderTable(['Param', 'Value'], reportData);
                 }
 
-                function appendChart(records, xAxis, yAxis, options) {
-                    options = options || {};
-                    var canvas = $('<canvas width="500" height="100"></canvas>');
-
-                    var ctx = canvas[0].getContext("2d");
-                    var chartData = {
-                        labels: [],
-                        datasets: [
-                            {
-                                label: "yAxis",
-                                fillColor: "rgba(151,187,205,0.2)",
-                                strokeColor: "rgba(151,187,205,1)",
-                                pointColor: "rgba(151,187,205,1)",
-                                pointStrokeColor: "#fff",
-                                pointHighlightFill: "#fff",
-                                pointHighlightStroke: "rgba(151,187,205,1)",
-                                data: []
-                            }
-                        ]
-                    };
-
-                    var record;
+                function appendHChart(records, xAxis, yAxis, options) {
+                    var record, data = [];
                     for (var id in records) {
                         if (records.hasOwnProperty(id)) {
                             record = records[id];
-                            chartData.labels.push(record[xAxis]);
-                            chartData.datasets[0].data.push(parseFloat(record[yAxis]));
+
+                            data.push([parseInt(record[xAxis]), parseFloat(record[yAxis])]);
                         }
                     }
 
-                    var myLineChart = new Chart(ctx).Line(chartData, options);
+                    //console.log(data);
+                    var canvas = $('<div style="width: 500px;height: 200px"></div>');
+
+                    $(function () {
+                        canvas.highcharts({
+                            title: null,
+                            legend: {enabled: false},
+                            yAxis: {title: null},
+                            credits:{enabled:false},
+                            series: [{
+                                type: "areaspline",
+                                data: data
+                            }]
+                        });
+                    });
                     return canvas;
                 }
 
@@ -669,7 +683,7 @@ class MemcachedTool {
 
                             evSet = slab['evicted'] / slab['cmd_set'];
 
-                            console.log(slab);
+                            //console.log(slab);
 
                             if (evSet >= 0.01) {
                                 pageSize = parseInt(slab['chunk_size']) * parseInt(slab['chunks_per_page']);
@@ -679,12 +693,12 @@ class MemcachedTool {
                                 preallocateNumber = Math.round(total_number * (1 + percent / 100));
                                 preallocatePages = Math.ceil(preallocateNumber / slab['chunks_per_page']);
 
-                                console.log(slab['chunk_size'], preallocateNumber, preallocatePages);
+                                //console.log(slab['chunk_size'], preallocateNumber, preallocatePages);
 
                                 if (preallocatePages < minAddedPages + 1*slab['total_pages']) {
                                     preallocatePages = minAddedPages + 1*slab['total_pages'];
                                     preallocateNumber = Math.ceil(preallocatePages * slab['chunks_per_page']);
-                                    console.log(slab['chunk_size'], preallocateNumber, preallocatePages);
+                                    //console.log(slab['chunk_size'], preallocateNumber, preallocatePages);
                                 }
 
                                 preallocateCommand += ' -p ' + slab['max'] + ':' + preallocateNumber;
@@ -694,6 +708,11 @@ class MemcachedTool {
                                 totalPreallocatedMemory += preallocatePages * pageSize;
                             }
                         }
+                    }
+
+
+                    if (!totalPages) {
+                        return '';
                     }
 
                     return '<h2>Many evictions found</h2>'
@@ -723,13 +742,13 @@ class MemcachedTool {
                         .append('<div style="float:left"><h2>Slabs</h2>' + slabReport(data) + '</div>')
 
                         .append(
-                        $('<div style="float:left"></div>')
-                            .append('<div>Evicted</div>').append(appendChart(data.slabs, 'id', 'evicted', {scaleShowLabels : false}))
-                            .append('<div>Used Memory</div>').append(appendChart(data.slabs, 'id', 'used_memory', {scaleShowLabels : false}))
-                            .append('<div>Count</div>').append(appendChart(data.slabs, 'id', 'number', {scaleShowLabels : false}))
-                            .append('<div>Hit Ratio</div>').append(appendChart(data.slabs, 'id', 'hit_ratio', {scaleShowLabels : false}))
-                            .append('<div>Hits</div>').append(appendChart(data.slabs, 'id', 'get_hits', {scaleShowLabels : false}))
-                            .append('<div>Sets</div>').append(appendChart(data.slabs, 'id', 'cmd_set', {scaleShowLabels : false}))
+                        $('<div id="report-cont" style="float:left"></div>')
+                            .append('<div>Evicted</div>').append(appendHChart(data.slabs, 'id', 'evicted', {scaleShowLabels : false}))
+                            .append('<div>Used Memory</div>').append(appendHChart(data.slabs, 'id', 'used_memory', {scaleShowLabels : false}))
+                            .append('<div>Count</div>').append(appendHChart(data.slabs, 'id', 'number', {scaleShowLabels : false}))
+                            .append('<div>Hit Ratio</div>').append(appendHChart(data.slabs, 'id', 'hit_ratio', {scaleShowLabels : false}))
+                            .append('<div>Hits</div>').append(appendHChart(data.slabs, 'id', 'get_hits', {scaleShowLabels : false}))
+                            .append('<div>Sets</div>').append(appendHChart(data.slabs, 'id', 'cmd_set', {scaleShowLabels : false}))
                     )
                         .append('<h2 style="clear:left">Key Groups</h2>' + keysReportHtml(data))
                         .append('<h2>Stats</h2>' + statsReportHtml(data))
@@ -862,10 +881,10 @@ php <?=basename(__FILE__)?> -r myhost:11211 myhost2:11011
 
 # fill 192.168.59.105:11211 with 50000 record with random size between 50 and 100,
 # zero ttl and names SMALL_0 to SMALL_49999
-php memcached-keys-stats.php -f 50000:50:100:0:0:SMALL_ 192.168.59.105:11211
+php <?=basename(__FILE__)?> -f 50000:50:100:0:0:SMALL_ 192.168.59.105:11211
 
 # delete items with names SMALL_0 to SMALL_49999 from 192.168.59.105:11211
-php memcached-keys-stats.php -d 50000:SMALL_ 192.168.59.105:11211
+php <?=basename(__FILE__)?> -d 50000:SMALL_ 192.168.59.105:11211
 
 <?php
 }
