@@ -1028,6 +1028,7 @@ foreach ($instances as $instance) {
             $jsonReports [$i]= $jsonOutput;
             $command = 'php ' . __FILE__ . ' -j ' . $jsonOutput;
             foreach ($benchData as $benchDataSet) {
+                $benchDataSet[0] = round($benchDataSet[0] / $threads);
                 $benchDataSet[5] .= $i . '_';
                 $command .= ' -b ' . implode(':', $benchDataSet);
             }
