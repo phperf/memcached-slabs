@@ -1,5 +1,7 @@
 #!/usr/bin/env php
 <?php
+srand(1);
+
 class MemcachedTool {
     public $host;
     public $port;
@@ -831,6 +833,26 @@ class MemcachedTool {
         echo "\n";
     }
 
+    public function getData($count, $prefix) {
+        $k = 0;
+        $dot = '.';
+        for ($i = 0; $i < $count; ++$i) {
+            $key = $prefix . $i;
+            $result = $this->getValue($key);
+            if (empty($result)) {
+                //echo $this->lastEnd;
+                $dot = 'e';
+            }
+            if (++$k > $this->dotSize) {
+                echo $dot;
+                $dot = '.';
+                $k = 0;
+            }
+        }
+        echo "\n";
+    }
+
+
 
     public $topEntitiesPath = false;
 }
@@ -885,6 +907,11 @@ php <?=basename(__FILE__)?> -r -s myhost:11211 myhost2:11011
 # generate slabs allocation html reports for myhost:11211 and myhost2:11011 (slower, with keys statistics)
 php <?=basename(__FILE__)?> -r myhost:11211 myhost2:11011
 
+# benchmark 192.168.59.105:11211 with 50000 record with random size between 50 and 100,
+# zero ttl and names SMALL_0 to SMALL_49999
+# in benchmark mode records are set, then read, then deleted
+php <?=basename(__FILE__)?> -b 5000:50:10000:0:0:SMALL_ 192.168.59.105:11211
+
 # fill 192.168.59.105:11211 with 50000 record with random size between 50 and 100,
 # zero ttl and names SMALL_0 to SMALL_49999
 php <?=basename(__FILE__)?> -f 50000:50:100:0:0:SMALL_ 192.168.59.105:11211
@@ -900,6 +927,7 @@ $evictedOnly = false;
 $saveKeys = false;
 $analyzeKeys = true;
 $fillData = array();
+$benchData = array();
 $deleteData = array();
 
 $instances = array();
@@ -926,6 +954,11 @@ for ($i = 1; $i < count($arguments); ++$i) {
         }
         case '-ps': {
             $preallocateSet []= explode(':', $arguments[$i+1]);
+            $i++;
+            break;
+        }
+        case '-b': {
+            $benchData []= explode(':', $arguments[$i+1]);
             $i++;
             break;
         }
@@ -975,17 +1008,42 @@ foreach ($instances as $instance) {
     $msc->analyzeKeys = $analyzeKeys;
     $msc->saveTopEntitiesCount = $saveTopEntitiesCount;
 
+    if ($benchData) {
+        echo "Benchmarking\n";
+        foreach ($benchData as $benchDataSet) {
+            $msc->dotSize = max(1, round($benchDataSet[0] / 100));
+
+            echo "Filling data\n";
+            $start = microtime(1);
+            $msc->fillData($benchDataSet[0], $benchDataSet[1], $benchDataSet[2], $benchDataSet[3], $benchDataSet[4], $benchDataSet[5]);
+            echo 'Done in ' . (microtime(1) - $start) . " s\n";
+
+            echo "Getting data\n";
+            $start = microtime(1);
+            $msc->getData($benchDataSet[0], $benchDataSet[5]);
+            echo 'Done in ' . (microtime(1) - $start) . " s\n";
+
+            echo "Deleting data\n";
+            $start = microtime(1);
+            $msc->deleteData($benchDataSet[0], $benchDataSet[5]);
+            echo 'Done in ' . (microtime(1) - $start) . " s\n";
+        }
+    }
+
     if ($fillData) {
         echo "Filling data\n";
         foreach ($fillData as $fillDataSet) {
+            $msc->dotSize = max(1, round($fillDataSet[0] / 100));
             $msc->fillData($fillDataSet[0], $fillDataSet[1], $fillDataSet[2], $fillDataSet[3], $fillDataSet[4], $fillDataSet[5]);
         }
     }
 
     if ($deleteData) {
         echo "Deleting data\n";
-        foreach ($deleteData as $deleteDataSet)
-        $msc->deleteData($deleteDataSet[0], $deleteDataSet[1]);
+        foreach ($deleteData as $deleteDataSet){
+            $msc->dotSize = max(1, round($deleteDataSet[0] / 100));
+            $msc->deleteData($deleteDataSet[0], $deleteDataSet[1]);
+        }
     }
 
     if ($getValues) {
