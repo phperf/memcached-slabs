@@ -939,6 +939,8 @@ $preallocateSet = array();
 $makeReport = false;
 $pte = false;
 $saveTopEntitiesCount = 0;
+$threads = false;
+$jsonOutput = false;
 
 for ($i = 1; $i < count($arguments); ++$i) {
     $arg = $arguments[$i];
@@ -954,6 +956,16 @@ for ($i = 1; $i < count($arguments); ++$i) {
         }
         case '-ps': {
             $preallocateSet []= explode(':', $arguments[$i+1]);
+            $i++;
+            break;
+        }
+        case '-t': {
+            $threads = $arguments[$i+1];
+            $i++;
+            break;
+        }
+        case '-j': {
+            $jsonOutput = $arguments[$i+1];
             $i++;
             break;
         }
@@ -1008,25 +1020,95 @@ foreach ($instances as $instance) {
     $msc->analyzeKeys = $analyzeKeys;
     $msc->saveTopEntitiesCount = $saveTopEntitiesCount;
 
+    if ($benchData && $threads) {
+        $jsonReports = array();
+
+        for ($i = 0; $i < $threads; ++$i) {
+            $jsonOutput = sys_get_temp_dir() . '/memcached_slabs_' . time() . '_' . $i;
+            $jsonReports [$i]= $jsonOutput;
+            $command = 'php ' . __FILE__ . ' -j ' . $jsonOutput;
+            foreach ($benchData as $benchDataSet) {
+                $benchDataSet[5] .= $i . '_';
+                $command .= ' -b ' . implode(':', $benchDataSet);
+            }
+            foreach ($instances as $instance) {
+                $command .= ' ' . implode(':', $instance);
+            }
+            //echo $command, PHP_EOL;
+            exec($command . '>/dev/null &');
+        }
+
+        $stats = array();
+        while ($jsonReports) {
+            foreach ($jsonReports as $i => $jsonOutput) {
+                if (file_exists($jsonOutput)) {
+                    $stats []= json_decode(file_get_contents($jsonOutput), true);
+                    unset($jsonReports[$i]);
+                    unlink($jsonOutput);
+                    echo '*';
+                }
+            }
+            echo '.';
+            sleep(1);
+        }
+
+        //print_r($stats);
+        $total = array(
+            'count' => 0,
+            'get' => 0,
+            'set' => 0,
+            'delete' => 0
+        );
+        foreach ($stats as $statData) {
+            foreach ($statData as $stat) {
+                $total['count'] += $stat['count'];
+                $total['get'] += $stat['get'];
+                $total['set'] += $stat['set'];
+                $total['delete'] += $stat['delete'];
+            }
+        }
+
+        $total ['get_speed'] = $total['count'] / $total['get'];
+        $total ['set_speed'] = $total['count'] / $total['set'];
+        $total ['delete_speed'] = $total['count'] / $total['delete'];
+        print_r($total);
+
+        exit;
+    }
+
     if ($benchData) {
-        echo "Benchmarking\n";
+        if (!$jsonOutput) {
+            echo "Benchmarking\n";
+        }
+        $stats = array();
         foreach ($benchData as $benchDataSet) {
+            $count = $benchDataSet[0];
+            $prefix = $benchDataSet[5];
             $msc->dotSize = max(1, round($benchDataSet[0] / 100));
+
+            $stat = array('count' => $count);
 
             echo "Filling data\n";
             $start = microtime(1);
-            $msc->fillData($benchDataSet[0], $benchDataSet[1], $benchDataSet[2], $benchDataSet[3], $benchDataSet[4], $benchDataSet[5]);
-            echo 'Done in ' . (microtime(1) - $start) . " s\n";
+            $msc->fillData($count, $benchDataSet[1], $benchDataSet[2], $benchDataSet[3], $benchDataSet[4], $prefix);
+            $stat['set'] = microtime(1) - $start;
+            echo 'Done in ' . $stat['set'] . " s\n";
 
             echo "Getting data\n";
             $start = microtime(1);
-            $msc->getData($benchDataSet[0], $benchDataSet[5]);
-            echo 'Done in ' . (microtime(1) - $start) . " s\n";
+            $msc->getData($count, $prefix);
+            $stat['get'] = microtime(1) - $start;
+            echo 'Done in ' . $stat['get'] . " s\n";
 
             echo "Deleting data\n";
             $start = microtime(1);
-            $msc->deleteData($benchDataSet[0], $benchDataSet[5]);
-            echo 'Done in ' . (microtime(1) - $start) . " s\n";
+            $msc->deleteData($count, $prefix);
+            $stat['delete'] = microtime(1) - $start;
+            echo 'Done in ' . $stat['delete'] . " s\n";
+            $stats []= $stat;
+        }
+        if ($jsonOutput) {
+            file_put_contents($jsonOutput, json_encode($stats));
         }
     }
 
