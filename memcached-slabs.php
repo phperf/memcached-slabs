@@ -346,13 +346,17 @@ class MemcachedTool {
         $this->initMemcached();
 
         $response = '';
-        fwrite($this->memcachedSock, "$command\r\n");
+        $this->totalWrite += strlen($command) + 2;
+        fwrite($this->memcachedSock, $command);
+        fwrite($this->memcachedSock, "\r\n");
+
         while (!feof($this->memcachedSock)) {
             $chunk = fread($this->memcachedSock, 8192);
 
             $response .= $chunk;
             foreach (self::$mcEnd as $end) {
                 if (substr($chunk, -strlen($end)) == $end) {
+                    $this->totalRead += strlen($response);
                     $response = substr($response, 0, -strlen($end));
                     $this->lastEnd = $end;
                     break 2;
@@ -793,6 +797,8 @@ class MemcachedTool {
     }
 
 
+    public $totalWrite = 0;
+    public $totalRead = 0;
     public function fillData($count, $minLength, $maxLength, $minTtl, $maxTtl, $prefix) {
         $k = 0;
         for ($i = 0; $i < $count; ++$i) {
@@ -1053,26 +1059,30 @@ foreach ($instances as $instance) {
             sleep(1);
         }
 
-        //print_r($stats);
-        $total = array(
-            'count' => 0,
-            'get' => 0,
-            'set' => 0,
-            'delete' => 0
-        );
+        $total = array();
         foreach ($stats as $statData) {
             foreach ($statData as $stat) {
-                $total['count'] += $stat['count'];
-                $total['get'] += $stat['get'];
-                $total['set'] += $stat['set'];
-                $total['delete'] += $stat['delete'];
+                foreach ($stat as $test => $results) {
+                    foreach ($results as $key => $value) {
+                        if (!isset($total[$test][$key])) {
+                            $total[$test][$key] = 0;
+                        }
+                        $total[$test][$key] += $value;
+                    }
+
+                }
             }
         }
 
-        $total ['get_speed'] = $total['count'] / $total['get'];
-        $total ['set_speed'] = $total['count'] / $total['set'];
-        $total ['delete_speed'] = $total['count'] / $total['delete'];
-        print_r($total);
+        ini_set('precision', 3);
+        echo PHP_EOL;
+        foreach ($total as $test => $result) {
+            echo $test, ': ',$result['count'] . ' items in ' . $result['time']
+                . ' s. ('.number_format($result['count'] / $result['time'], 2, '.', '').' items/s), '
+                . $result['read'] . ' ('.number_format($result['read'] / $result['time'], 2, '.', '').' B/s) bytes read, '
+                . $result['write'] . ' ('.number_format($result['write'] / $result['time'], 2, '.', '').' B/s) bytes written'
+                . PHP_EOL;
+        }
 
         exit;
     }
@@ -1087,25 +1097,39 @@ foreach ($instances as $instance) {
             $prefix = $benchDataSet[5];
             $msc->dotSize = max(1, round($benchDataSet[0] / 100));
 
-            $stat = array('count' => $count);
 
             echo "Filling data\n";
             $start = microtime(1);
+            $msc->totalRead = 0;
+            $msc->totalWrite = 0;
             $msc->fillData($count, $benchDataSet[1], $benchDataSet[2], $benchDataSet[3], $benchDataSet[4], $prefix);
-            $stat['set'] = microtime(1) - $start;
-            echo 'Done in ' . $stat['set'] . " s\n";
+            $stat['set']['count'] = $count;
+            $stat['set']['time'] = microtime(1) - $start;
+            $stat['set']['read'] = $msc->totalRead;
+            $stat['set']['write'] = $msc->totalWrite;
+            echo 'Done in ' . $stat['set']['time'] . " s\n";
 
             echo "Getting data\n";
             $start = microtime(1);
+            $msc->totalRead = 0;
+            $msc->totalWrite = 0;
             $msc->getData($count, $prefix);
-            $stat['get'] = microtime(1) - $start;
-            echo 'Done in ' . $stat['get'] . " s\n";
+            $stat['get']['count'] = $count;
+            $stat['get']['time'] = microtime(1) - $start;
+            $stat['get']['read'] = $msc->totalRead;
+            $stat['get']['write'] = $msc->totalWrite;
+            echo 'Done in ' . $stat['get']['time'] . " s\n";
 
             echo "Deleting data\n";
             $start = microtime(1);
+            $msc->totalRead = 0;
+            $msc->totalWrite = 0;
             $msc->deleteData($count, $prefix);
-            $stat['delete'] = microtime(1) - $start;
-            echo 'Done in ' . $stat['delete'] . " s\n";
+            $stat['delete']['count'] = $count;
+            $stat['delete']['time'] = microtime(1) - $start;
+            $stat['delete']['read'] = $msc->totalRead;
+            $stat['delete']['write'] = $msc->totalWrite;
+            echo 'Done in ' . $stat['delete']['time'] . " s\n";
             $stats []= $stat;
         }
         if ($jsonOutput) {
