@@ -1017,6 +1017,17 @@ for ($i = 1; $i < count($arguments); ++$i) {
 
 
 }
+
+function bytes($bytes) {
+    if ($bytes > 1024 * 1024) {
+        return number_format($bytes / (1024 * 1024), 2, '.', '') . ' MB';
+    }
+    if ($bytes > 1024) {
+        return number_format($bytes / (1024), 2, '.', '') . ' KB';
+    }
+    return number_format($bytes / (1024), 2, '.', '') . ' B';
+}
+
 set_time_limit(0);
 foreach ($instances as $instance) {
     $msc = new MemcachedTool($instance[0], $instance[1]);
@@ -1078,8 +1089,8 @@ foreach ($instances as $instance) {
         foreach ($total as $test => $result) {
             echo $test, ': ',$result['count'] . ' items in ' . $result['time']
                 . ' s. ('.number_format($result['count'] / $result['time'], 2, '.', '').' items/s), '
-                . $result['read'] . ' ('.number_format($result['read'] / $result['time'], 2, '.', '').' B/s) bytes read, '
-                . $result['write'] . ' ('.number_format($result['write'] / $result['time'], 2, '.', '').' B/s) bytes written'
+                . bytes($result['read']) . ' ('.bytes($result['read'] / $result['time']).'/s) read, '
+                . bytes($result['write']) . ' ('.bytes($result['write'] / $result['time']).'/s) written'
                 . PHP_EOL;
         }
 
