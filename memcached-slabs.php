@@ -347,8 +347,7 @@ class MemcachedTool {
 
         $response = '';
         $this->totalWrite += strlen($command) + 2;
-        fwrite($this->memcachedSock, $command);
-        fwrite($this->memcachedSock, "\r\n");
+        fwrite($this->memcachedSock, $command . "\r\n");
 
         while (!feof($this->memcachedSock)) {
             $chunk = fread($this->memcachedSock, 8192);
