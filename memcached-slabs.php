@@ -353,8 +353,9 @@ class MemcachedTool {
             $chunk = fread($this->memcachedSock, 8192);
 
             $response .= $chunk;
+            $check = substr($response, -14);
             foreach (self::$mcEnd as $end) {
-                if (substr($chunk, -strlen($end)) == $end) {
+                if (substr($check, -strlen($end)) == $end) {
                     $this->totalRead += strlen($response);
                     $response = substr($response, 0, -strlen($end));
                     $this->lastEnd = $end;
@@ -1069,10 +1070,27 @@ foreach ($instances as $instance) {
             sleep(1);
         }
 
+        //print_r($stats);
+
         $total = array();
         foreach ($stats as $statData) {
             foreach ($statData as $stat) {
                 foreach ($stat as $test => $results) {
+
+                    //print_r($results);
+                    $total[$test]['start'] = isset($total[$test]['start'])
+                        ? min($results['start'], $total[$test]['start'])
+                        : $results['start'];
+
+                    $total[$test]['end'] = isset($total[$test]['end'])
+                        ? max($results['end'], $total[$test]['end'])
+                        : $results['end'];
+
+                    unset($results['start']);
+                    unset($results['end']);
+
+
+
                     foreach ($results as $key => $value) {
                         if (!isset($total[$test][$key])) {
                             $total[$test][$key] = 0;
@@ -1087,6 +1105,8 @@ foreach ($instances as $instance) {
         ini_set('precision', 3);
         echo PHP_EOL;
         foreach ($total as $test => $result) {
+            $result['time'] = $result['end'] - $result['start'];
+
             echo $test, ': ',$result['count'] . ' items in ' . $result['time']
                 . ' s. ('.number_format($result['count'] / $result['time'], 2, '.', '').' items/s), '
                 . bytes($result['read']) . ' ('.bytes($result['read'] / $result['time']).'/s) read, '
@@ -1114,7 +1134,9 @@ foreach ($instances as $instance) {
             $msc->totalWrite = 0;
             $msc->fillData($count, $benchDataSet[1], $benchDataSet[2], $benchDataSet[3], $benchDataSet[4], $prefix);
             $stat['set']['count'] = $count;
-            $stat['set']['time'] = microtime(1) - $start;
+            $stat['set']['start'] = $start;
+            $stat['set']['end'] = microtime(1);
+            $stat['set']['time'] = $stat['set']['end'] - $start;
             $stat['set']['read'] = $msc->totalRead;
             $stat['set']['write'] = $msc->totalWrite;
             echo 'Done in ' . $stat['set']['time'] . " s\n";
@@ -1125,7 +1147,9 @@ foreach ($instances as $instance) {
             $msc->totalWrite = 0;
             $msc->getData($count, $prefix);
             $stat['get']['count'] = $count;
-            $stat['get']['time'] = microtime(1) - $start;
+            $stat['get']['start'] = $start;
+            $stat['get']['end'] = microtime(1);
+            $stat['get']['time'] = $stat['get']['end'] - $start;
             $stat['get']['read'] = $msc->totalRead;
             $stat['get']['write'] = $msc->totalWrite;
             echo 'Done in ' . $stat['get']['time'] . " s\n";
@@ -1136,7 +1160,9 @@ foreach ($instances as $instance) {
             $msc->totalWrite = 0;
             $msc->deleteData($count, $prefix);
             $stat['delete']['count'] = $count;
-            $stat['delete']['time'] = microtime(1) - $start;
+            $stat['delete']['start'] = $start;
+            $stat['delete']['end'] = microtime(1);
+            $stat['delete']['time'] = $stat['delete']['end'] - $start;
             $stat['delete']['read'] = $msc->totalRead;
             $stat['delete']['write'] = $msc->totalWrite;
             echo 'Done in ' . $stat['delete']['time'] . " s\n";
