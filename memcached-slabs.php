@@ -947,6 +947,7 @@ $pte = false;
 $saveTopEntitiesCount = 0;
 $threads = false;
 $jsonOutput = false;
+$debug = false;
 
 for ($i = 1; $i < count($arguments); ++$i) {
     $arg = $arguments[$i];
@@ -968,6 +969,10 @@ for ($i = 1; $i < count($arguments); ++$i) {
         case '-t': {
             $threads = $arguments[$i+1];
             $i++;
+            break;
+        }
+        case '-v': {
+            $debug = true;
             break;
         }
         case '-j': {
@@ -1037,6 +1042,8 @@ foreach ($instances as $instance) {
     $msc->analyzeKeys = $analyzeKeys;
     $msc->saveTopEntitiesCount = $saveTopEntitiesCount;
 
+    $now = microtime(1);
+
     if ($benchData && $threads) {
         $jsonReports = array();
 
@@ -1067,17 +1074,25 @@ foreach ($instances as $instance) {
                 }
             }
             echo '.';
-            sleep(1);
+            usleep(100000);
         }
 
         //print_r($stats);
 
+
+        $log = array();
+        $resultTimes = array();
         $total = array();
         foreach ($stats as $statData) {
             foreach ($statData as $stat) {
                 foreach ($stat as $test => $results) {
 
+                    $log[$test] []= array($results['start'] - $now , $results['end'] - $now);
+                    $resultTimes[$test] []= $results['end'] - $results['start'];
+
+
                     //print_r($results);
+                    /*
                     $total[$test]['start'] = isset($total[$test]['start'])
                         ? min($results['start'], $total[$test]['start'])
                         : $results['start'];
@@ -1085,6 +1100,8 @@ foreach ($instances as $instance) {
                     $total[$test]['end'] = isset($total[$test]['end'])
                         ? max($results['end'], $total[$test]['end'])
                         : $results['end'];
+                    */
+
 
                     unset($results['start']);
                     unset($results['end']);
@@ -1103,9 +1120,19 @@ foreach ($instances as $instance) {
         }
 
         ini_set('precision', 3);
+        //print_r($log);
+        if ($debug) {
+            foreach ($log as $test => $times) {
+                echo $test, PHP_EOL;
+                foreach ($times as $time) {
+                    echo $time[0], ' ', $time[1], ' ', ($time[1] - $time[0]), PHP_EOL;
+                }
+            }
+        }
+
         echo PHP_EOL;
         foreach ($total as $test => $result) {
-            $result['time'] = $result['end'] - $result['start'];
+            $result['time'] = array_sum($resultTimes[$test]) / count($resultTimes[$test]);;
 
             echo $test, ': ',$result['count'] . ' items in ' . $result['time']
                 . ' s. ('.number_format($result['count'] / $result['time'], 2, '.', '').' items/s), '
