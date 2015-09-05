@@ -2,6 +2,13 @@
 <?php
 srand(1);
 
+function starMatch($pattern, $string) {
+    $pattern = preg_quote($pattern);
+    $pattern = '/^' . str_replace(array('%', '\\?'), array('.*', '.'), $pattern) . '$/';
+
+    return preg_match($pattern, $string);
+}
+
 class MemcachedTool {
     public $host;
     public $port;
@@ -101,15 +108,30 @@ class MemcachedTool {
             $slab['max'] = max($slab['max'], $length);
             $slab['avg'] = ($slab['avg'] * ($count - 1) / $count) + ($length / $count);
 
+            $mask = null;
+            //var_dump($this->groupPatterns);
+            //die();
 
-            $path = explode('_', $key);
-            foreach ($path as &$item) {
-                if (preg_match('/[0-9\.]+/', $item)) {
-                    $item = '%';
+            foreach ($this->groupPatterns as $pattern) {
+
+                $match = starMatch($pattern, $key);
+                if ($match) {
+                    $mask = $pattern;
+                    break;
                 }
             }
 
-            $mask = implode('_', $path);
+            if (!$mask) {
+                $path = explode('_', $key);
+                foreach ($path as &$item) {
+                    if (preg_match('/[0-9\.]+/', $item)) {
+                        $item = '%';
+                    }
+                }
+
+                $mask = implode('_', $path);
+            }
+
             $total = &$this->keyStats[$mask];
             ++$total;
 
@@ -206,6 +228,8 @@ class MemcachedTool {
         return $this->keyStats;
     }
 
+
+    public $groupPatterns = array();
 
     public $evictedOnly = false;
 
@@ -895,6 +919,7 @@ Options:
     -ste <count> save top size entities per key group count (print_r'ed), default 10
     -g <key> get key value (raw protocol)
     -gp <key> print_r key value (Memcached extension required)
+    -kp <pattern> key name grouping pattern, e.g. -kp search_name_*_my -kp product_name_*
 
 Examples:
 
@@ -948,6 +973,7 @@ $saveTopEntitiesCount = 0;
 $threads = false;
 $jsonOutput = false;
 $debug = false;
+$groupPatterns = array();
 
 for ($i = 1; $i < count($arguments); ++$i) {
     $arg = $arguments[$i];
@@ -1010,6 +1036,11 @@ for ($i = 1; $i < count($arguments); ++$i) {
             $i++;
             break;
         }
+        case '-kp': {
+            $groupPatterns[$arguments[$i+1]] = $arguments[$i+1];
+            $i++;
+            break;
+        }
         default: {
             if (strpos($arg, ':') === false) {
                 die("Bad argument: " . $arg);
@@ -1037,6 +1068,7 @@ function bytes($bytes) {
 set_time_limit(0);
 foreach ($instances as $instance) {
     $msc = new MemcachedTool($instance[0], $instance[1]);
+    $msc->groupPatterns = $groupPatterns;
     $msc->evictedOnly = $evictedOnly;
     $msc->saveKeys = $saveKeys;
     $msc->analyzeKeys = $analyzeKeys;
